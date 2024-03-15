@@ -1,4 +1,4 @@
-# APIMatchmak
+# APIMatchMaker
 
 ## Running steps
 
