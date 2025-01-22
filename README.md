@@ -2,23 +2,22 @@
 
 ## Running steps
 
-1. Use getSDKVersion.py to get the SDK Version (including the min SDK version and target SDK version) of each app.
+1. Install dependencies using: `pip install -r requirements.txt`
 
-2. Use PresolvedCSVFilter.py to solve the descriptions.
+2. Run the dataset-prep script using: `python dataset-prep.py`
 
-3. Use lib/APIExtractor.jar to extract the method declarations and method invocations of each app.
+3. Run the dataset-gen script using: `python dataset-gen.py`
 
-4. Use the DatasetGenerator.py to generate the datasets for evaluation.
+4. Run the main script for the system using: `python main.py`
 
-5. Run main.py to start. The arguments are detailed in the *getOptions()* function of main.py.
+5. Once all dataset folds are processed by APIMatchmaker, run the Evaluation script for each dataset fold using: `python Evaluation.py <dataset fold number>`.
+   For example, dataset fold 1 (in ./dataset/dataset_1) can be evaluated using: `python Evaluation.py 1`
     
 
 ## The code structure
 
-1. The *lib* folder contains a tool developed to extract the methods and APIs from the APK files.
+1. The *data-dump* folder contains a file that points to the url of the openly available dataset.
 
-2. The *Dataset* folder contains a file that points to the url of the openly available dataset.
+3. The *common* folder contains some basic functions, such as the crawler we used to collect the descriptions.
 
-3. The *Helper* folder contains some basic functions, such as the crawler we used to collect the descriptions.
-
-4. The *Main* folder contains the contains the most core code, including the implementation of our approach.
+4. The *main* folder contains the contains the most core code, including the implementation of the approach.

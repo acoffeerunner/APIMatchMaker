@@ -1,8 +1,8 @@
 # coding:utf-8
 import re
 import numpy as np
-from Main.ProjectSimCounter import ProjectSimCounter
-from Helper.common import *
+from main.ProjectSimCounter import ProjectSimCounter
+from common.file_ops import *
 
 
 class ContextAwareRecommendation:
@@ -13,12 +13,14 @@ class ContextAwareRecommendation:
     numOfRows = 0
     numOfCols = 0
 
-    def __init__(self, OPTIONS, custom_args, numOfNeighbours, sizeofMi, min_lines):
+    def __init__(self, OPTIONS, custom_args, numOfNeighbours, sizeofMi, min_lines, P_S, D_S):
         self.OPTIONS = OPTIONS
         self.custom_args = custom_args
         self.numOfNeighbours = numOfNeighbours
         self.sizeofMi = sizeofMi
         self.min_lines = min_lines
+        self.projectSIm = P_S
+        self.DescSim = D_S
 
 
     def clear_pre(self):
@@ -32,16 +34,24 @@ class ContextAwareRecommendation:
     # collaborative-filtering technique
 
     def recommendation(self):
+        # load sdk files
+        minsdk = "minSdkVersion.txt"
+        targetsdk = "targetSdkVersion.txt"
+        csvfile = "android_api_lifetime.txt"
+        sdkset = load_file(csvfile)
+        minsdkset = load_sdks(minsdk)
+        targetsdkset = load_sdks(targetsdk)
+
         testingProjects = self.getTestingProjectNames()
         for testingPro in testingProjects:
+            self.OPTIONS.log_obj.debug(f"Generating recommendation list for {testingPro}")
             self.clear_pre()
             if os.path.exists(os.path.join(self.custom_args['RECOMMENDATION_PATH'], testingPro + ".csv")):
                 continue
             recommendations = {}  # {str: float}
-
-            simi_path = self.custom_args['Project_Sim']
-
-            simScores = self.getSimilarityScores(simi_path, testingPro, self.numOfNeighbours)
+            descsimScores = self.getDescsimScores(self.custom_args['Training_Set_filtered'], testingPro)
+            simPath = self.custom_args['Project_Sim']
+            simScores = self.getSimilarityScores(simPath, testingPro, self.numOfNeighbours)
             matrix = self.buildUserItemContextMatrix(testingPro)
 
             # The testingMethodVector represents the invocations made from the testing method
@@ -65,7 +75,7 @@ class ContextAwareRecommendation:
             top3Sim = simSortedList[:self.sizeofMi]
 
             # Initial
-            ratings = [0.0] * (self.numOfCols - 1)
+            ratings = [0.0] * (self.numOfCols)
 
             # For every '?' cell (-1.0), compute a rating
             for k in range(self.numOfCols):
@@ -86,12 +96,13 @@ class ContextAwareRecommendation:
 
                         project = self.listOfProjects[slice]
                         projectSim = simScores[project]
+                        descSim = descsimScores[project]
 
                         # Project similarity * the close method's val (1 or 0)
-                        val = projectSim * matrix[slice][row][k]
+                        R_val = (projectSim * self.projectSIm + descSim * self.DescSim) * matrix[slice][row][k]
                         methodSim = item[1]  # top-3 method Jaccard sim
                         totalSim += methodSim
-                        ratings[k] += (val - avgMDRating) * methodSim
+                        ratings[k] += (R_val - avgMDRating) * methodSim
 
                     if totalSim:
                         ratings[k] /= totalSim
@@ -102,7 +113,24 @@ class ContextAwareRecommendation:
 
             recSortedList = dict2sortedlist(recommendations)
             headings = ["Method Invocation", "Rating"]
-            writeScores(self.custom_args['RECOMMENDATION_PATH'], testingPro, recSortedList[:20], headings)
+
+            filtered_sdk_lst = []
+            for tmplst in recSortedList:
+                methodInvocation = tmplst[0]
+                if testingPro not in minsdkset or testingPro not in targetsdkset:
+                    continue
+                min_sdk_ = minsdkset[testingPro]
+                target_sdk_ = targetsdkset[testingPro]
+                if methodInvocation in sdkset:
+                    supportsdks = sdkset[methodInvocation]
+                    if min_sdk_ >= supportsdks[0] and target_sdk_ <= supportsdks[-1]:
+                        filtered_sdk_lst.append(tmplst)
+                        if len(filtered_sdk_lst) == 20:
+                            break
+
+            self.OPTIONS.log_obj.debug(f"Writing recommendation list for {testingPro} to {self.custom_args['RECOMMENDATION_PATH']}")
+            writeScores(self.custom_args['RECOMMENDATION_PATH'], testingPro, filtered_sdk_lst, headings)
+            self.OPTIONS.log_obj.info(f"Recommendation list for {testingPro} generated")
 
         return self.testingMIs
 
@@ -136,7 +164,7 @@ class ContextAwareRecommendation:
         # Read the corresponding groundtruth file, set(md: [mis...])
         # Keep in order with list, normally, only one item in "groundTruthMIs"
         # This step is to get the testingMD
-        groundTruthMIs = self.getGroundTruthInvocations(self.custom_args['GroundTruth_PATH'], testingPro)
+        groundTruthMIs = self.getGroundTruthInvocations(self.custom_args['Test_Set'], testingPro)
 
         testingMD = ""  # md needs to be recommended
         for item in groundTruthMIs:
@@ -178,7 +206,7 @@ class ContextAwareRecommendation:
         self.numOfCols = len(listOfMIs)
 
         # Populate all cells in the user-item-context ratings matrix using 1s and 0s
-        matrix = np.zeros([self.numOfSlices, self.numOfRows, self.numOfCols], dtype=np.int)
+        matrix = np.zeros([self.numOfSlices, self.numOfRows, self.numOfCols], dtype=int)
 
         for i in range(self.numOfSlices - 1):
             currentPro = listOfPRs[i]
@@ -220,6 +248,17 @@ class ContextAwareRecommendation:
             self.listOfMethodInvocations.append(l)
 
         return matrix
+
+    def getDescsimScores(self, desc_sim, testingPro):
+        Desc_scores = {}
+        filename = os.path.join(desc_sim, testingPro + ".csv")
+        with open(filename, "r") as fr:
+            reader = csv.reader(fr)
+            headings = next(reader)
+            for line in reader:
+                Desc_scores[line[0]] = float(line[1])
+        return Desc_scores
+
 
     # Get all method invocations that do not belong to the ground-truth data
     def getTestingProjectDetails(self, src, testingPro, testingMD):
@@ -331,7 +370,7 @@ class ContextAwareRecommendation:
 
     def getTestingProjectNames(self):
         names = []
-        files = getFileList(self.custom_args['Training_Set_filtered'], ".csv")
+        files = getFileList(self.custom_args['Project_Sim'], ".csv")
         for file in files:
             names.append(os.path.split(file)[-1][:-4])
         return names

@@ -1,14 +1,8 @@
 # coding:utf-8
-from Main.ProjectSimCounter import ProjectSimCounter
-from Main.DescriptionSimCounter import DescriptionSimCounter
-from Main.DescriptionSimCounter2 import DescriptionSimCounter2
-from Main.DescriptionCluster import DescriptionCluster
-from Main.NoDescription import NoDescription
-from Main.ContextAwareRecommendation import ContextAwareRecommendation
-from Main.ContextAwareRecommendation2 import ContextAwareRecommendation2
-from Main.BaselineBuilder import BaselineBuilder
-# from APIUsagePatternSearcher import APIUsagePatternSearcher
-from Main.Evaluation import Evaluation
+from main.ProjectSimCounter import ProjectSimCounter
+from main.DescriptionSimCounter import DescriptionSimCounter
+from main.ContextAwareRecommendation import ContextAwareRecommendation
+from main.Evaluation import Evaluation
 import time
 
 
@@ -18,60 +12,61 @@ class Runner:
         self.custom_args = custom_args
 
     def start(self):
-        # start_time = time.clock()
+        start_time = time.time()
         # print("[+] Starting ... ")
 
         # # (1)
+
+        self.OPTIONS.log_obj.info("Calculating description similarities")
         descriptionSimCounter = DescriptionSimCounter(self.OPTIONS, self.custom_args, 0)
         descriptionSimCounter.start()
-        print("[+] Description Similarity done.")
-
-        # (2)
-        # noDescription = NoDescription(self.OPTIONS, self.custom_args)
-        # noDescription.start()
+        self.OPTIONS.log_obj.info("Description similarities calculated")
 
         # Compute similarity between projects
-
+        self.OPTIONS.log_obj.info("Calculating method similarities")
         projectSimCounter = ProjectSimCounter(self.OPTIONS, self.custom_args)
         projectSimCounter.computeProjectSimilarity()
-        print("[+] SimilarityCalculator done.")
-
-        # Consider 10 closest projects, 6 top-closet method declarations,
-        # The training projects contain at least 6 declarations
-
-        # note here ------------------
-        contextAwareRecommendation = ContextAwareRecommendation2(self.OPTIONS, self.custom_args, 10, 6, 6, 1, 0)
+        self.OPTIONS.log_obj.info("Method similarities calculated")
+        
+        # Recommendation processing
+        self.OPTIONS.log_obj.info("Starting recommendation engine")
+        contextAwareRecommendation = ContextAwareRecommendation(self.OPTIONS, self.custom_args, 10, 6, 6, 1, 0)
         contextAwareRecommendation.recommendation()
-        print("[+] Recommendation engine done.")
-        # note here ------------------
+        self.OPTIONS.log_obj.info("Recommendations written to directory!")
+        
 
-        #
-        # end = time.clock()
-        # running_time = end - start_time
-        # with open("runtime.txt", "a+") as fw:
-        #     fw.write(str(running_time) + "\n")
-        #
-        # baselinebuilder = BaselineBuilder(self.OPTIONS, self.custom_args)
-        # baselinebuilder.start()
-        # # Match the API usage pattern
-        # apiUsagePatternSearcher = APIUsagePatternSearcher(self.OPTIONS, self.custom_args, 20)
-        # apiUsagePatternSearcher.searchAPIUsagePatterns()
-        # print("[+] Match API usage pattern done.")
-
-        # note here ------------------
-        print("[+] Start evaluation.")
+        # Evaluation @1, @5, @10, @15, @20
+        self.OPTIONS.log_obj.info("Evaluating results")
+        
+        self.OPTIONS.log_obj.debug("Evaluating results @1")
         evaluation = Evaluation(self.OPTIONS, self.custom_args, 1)
         evaluation.start()
+        self.OPTIONS.log_obj.debug("Evaluation of results @1 completed")
+
+        self.OPTIONS.log_obj.debug("Evaluating results @5")
         evaluation = Evaluation(self.OPTIONS, self.custom_args, 5)
         evaluation.start()
+        self.OPTIONS.log_obj.debug("Evaluation of results @5 completed")
+
+        self.OPTIONS.log_obj.debug("Evaluating results @10")
         evaluation = Evaluation(self.OPTIONS, self.custom_args, 10)
         evaluation.start()
+        self.OPTIONS.log_obj.debug("Evaluation of results @10 completed")
+
+        self.OPTIONS.log_obj.debug("Evaluating results @15")
         evaluation = Evaluation(self.OPTIONS, self.custom_args, 15)
         evaluation.start()
+        self.OPTIONS.log_obj.debug("Evaluation of results @15 completed")
+
+        self.OPTIONS.log_obj.debug("Evaluating results @20")
         evaluation = Evaluation(self.OPTIONS, self.custom_args, 20)
         evaluation.start()
-        print("[+] Evaluation done.")
-        # note here ------------------
+        self.OPTIONS.log_obj.debug("Evaluation of results @20 completed")
 
+        self.OPTIONS.log_obj.info("Evaluation completed")
+
+        end = time.time()
+        running_time = end - start_time
+        self.OPTIONS.log_obj.info(f"Fold run completed in {running_time:.2f} seconds")
 
 

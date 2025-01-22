@@ -3,33 +3,7 @@ import sys
 import os
 import csv
 csv.field_size_limit(100000000)
-
-def getFileList(rootDir, pick_str):
-    """
-    :param rootDir:  root directory of dataset
-    :return: A filepath list of sample
-    """
-    filePath = []
-    for parent, dirnames, filenames in os.walk(rootDir):
-        for filename in filenames:
-            if filename.endswith(pick_str):
-                file = os.path.join(parent, filename)
-                filePath.append(file)
-    return filePath
-
-
-def getFileList2(rootDir, start_str, end_str):
-    """
-    :param rootDir:  root directory of dataset
-    :return: A filepath list of sample
-    """
-    filePath = []
-    for file in os.listdir(rootDir):
-        if file.startswith(start_str) and file.endswith(end_str):
-            filename = os.path.join(rootDir, file)
-            filePath.append(filename)
-    return filePath
-
+from common.file_ops import *
 
 class Evaluation:
     def __init__(self, OPTIONS, custom_args, n):
@@ -43,7 +17,7 @@ class Evaluation:
         for file in files:
             testingProjectNames.append(os.path.split(file)[-1][:-4])
         for testPro in testingProjectNames:
-            GT_set = self.getGroundTruthInvocations_set(self.custom_args['GroundTruth_PATH'], testPro, self.n)
+            GT_set = self.getGroundTruthInvocations_set(self.custom_args['Test_Set'], testPro, self.n)
             pre_lst = self.getPrediction_lst(self.custom_args['RECOMMENDATION_PATH'], testPro, self.n)
             if len(GT_set) < self.n or len(pre_lst) < self.n:
                 continue
@@ -156,18 +130,18 @@ def count_successrate(files):
 
 
 if __name__ == '__main__':
-    baseline_or_not = int(sys.argv[1])  # 1 or 0
-    topnum = str(sys.argv[2])
-    if baseline_or_not:
-        start_s = "baseline_evaluation"
-    else:
-        start_s = "evaluation"
-    start_s = start_s + topnum + "_"
-    print(start_s)
+    #baseline_or_not = int(sys.argv[1])  # 1 or 0
+    #topnum = str(sys.argv[2])
+    #if baseline_or_not:
+    #    start_s = "baseline_evaluation"
+    #else:
+    #    start_s = "evaluation"
+    #start_s = start_s + topnum + "_"
+    #print(start_s)
 
-    path = os.path.abspath(os.path.dirname(os.getcwd()))
+    path = "/home/acoffeerunner/APIMatchmaker"
     print(path)
-    files = getFileList2(path, start_s, ".csv")
+    files = getFileList2(path, "evaluation", ".csv")
     print(files)
 
     count_precision(files)

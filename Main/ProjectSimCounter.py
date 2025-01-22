@@ -1,20 +1,27 @@
 # coding:utf-8
 import math
 import re
-
-from Helper.common import *
-
+from concurrent.futures import ProcessPoolExecutor
+from common.file_ops import *
 
 class ProjectSimCounter:
     def __init__(self, OPTIONS, custom_args):
         self.OPTIONS = OPTIONS
         self.custom_args = custom_args
 
-    # Compute the similarity between each testing project and all training projects
+    # Define the worker function outside of the class
+    def worker(self, testingPro, trainingProjects):
+        testingProject = self.getProjectInvocations(self.custom_args['Test_Set'], testingPro)
+        trainingProjects[testingPro] = testingProject
+        trainingPro_selected = self.getTrainingPro_selected(self.custom_args['Training_Set_filtered'], testingPro)
+        self.computeSimilarity(testingPro, trainingProjects, trainingPro_selected)
+        trainingProjects.pop(testingPro)
+
     def computeProjectSimilarity(self):
         # Read all testing project IDs in testingProjectsID
         testingProjectNames = []
-        # contain similar training projects
+        
+        # get list of files processed by DescriptionSimCounter
         files = getFileList(self.custom_args['Training_Set_filtered'], ".csv")
         for file in files:
             testingPro = os.path.split(file)[-1][:-4]
@@ -29,19 +36,20 @@ class ProjectSimCounter:
         for trainingPro in trainingProjectNames:
             trainingProjects[trainingPro] = self.getProjectInvocations(self.OPTIONS.presolve, trainingPro)
 
-        for testingPro in testingProjectNames:
-            testingProject = self.getProjectInvocations(self.custom_args['Test_Set'], testingPro)
-            trainingProjects[testingPro] = testingProject
-            trainingPro_selected = self.getTrainingPro_selected(self.custom_args['Training_Set_filtered'], testingPro)
-            self.computeSimilarity(testingPro, trainingProjects, trainingPro_selected)
-            trainingProjects.pop(testingPro)
+        # ProcessPoolExecutor 
+        n_workers = self.OPTIONS.maxjob - 1
+        with ProcessPoolExecutor(max_workers=n_workers) as executor:
+            futures = [executor.submit(self.worker, testingPro, trainingProjects) for testingPro in testingProjectNames]
+            for future in futures:
+                future.result()
 
     def computeSimilarity(self, testingPro, projects, trainingPro_selected):
+        self.OPTIONS.log_obj.debug(f"Computing term frequency for {testingPro}")
         termFrequency = self.computeTermFrequency(projects)
         testingProjectVector = {}  # {API(str): float}
         projectSimilarities = {}  # {train_project(str): float}
 
-        print("Computing similarity between %s and all other projects" % testingPro)
+        self.OPTIONS.log_obj.debug(f"Computing similarity between {testingPro} and all other projects")
 
         # Computes the feature vector of the testing project,
         # 	 ie. the TF-IDF for all its invocations
@@ -52,10 +60,7 @@ class ProjectSimCounter:
 
         # Compute the feature vector of all training projects in the corpus and
         # 	 store their similarity with the testing project in the similarity vector
-
         for trainingProject in trainingPro_selected:
-            if trainingProject == testingPro:
-                continue
             trainingProjectVector = {}
             terms = projects[trainingProject]
             for term in terms:
@@ -69,10 +74,12 @@ class ProjectSimCounter:
         # Order projects by similarity, reverse=True
         projectSimilarity_list = dict2sortedlist(projectSimilarities)
 
-        # Saving...
+        # write to file
         if projectSimilarity_list:
             headings = ["Training Project", "Cosine Similarity"]
             writeScores(self.custom_args['Project_Sim'], testingPro, projectSimilarity_list, headings)
+
+        self.OPTIONS.log_obj.info(f"Method similarities for {testingPro} calculated")
 
 
     def getProjectInvocations(self, path, pro):
@@ -80,7 +87,7 @@ class ProjectSimCounter:
         filename = os.path.join(path, pro + ".csv")
         with open(filename, "r") as fr:
             reader = csv.reader(fr)
-            headings = next(reader)
+            _ = next(reader) # skip headers
             for line in reader:
                 string = line[1].strip('\"[] ')
                 pattern = r'(<.*?>)'
